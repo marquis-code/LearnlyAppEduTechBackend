@@ -1,10 +1,10 @@
+require("express-async-errors");
+require("dotenv").config();
 const express = require("express");
 const app = express();
 const morgan = require("morgan");
 const helment = require("helmet");
 const cors = require("cors");
-const dotenv = require("dotenv");
-dotenv.config();
 
 const cookieParser = require("cookie-parser");
 const port = process.env.PORT || 3000;
@@ -26,22 +26,24 @@ app.use(express.json());
 app.disable('x-powered-by');
 
 const authRouter = require("./routes/auth.routes");
-const publicationRouter = require("./routes/publication.routes");
-const subscriptionRouter = require("./routes/subscription.routes");
-const memberRouter = require("./routes/member.routes");
-const eventRouter = require("./routes/event.routes");
+const manuscriptRoutes = require('./routes/manuscript.routes');
+const journalRoutes = require('./routes/journal.routes');
+const proceedingsRoutes = require('./routes/proceedings.routes');
+const conferenceSubmissionRoutes = require('./routes/conference.routes');
+const authorRoutes = require('./routes/author.routes');
 
 // map URL starts:
 app.use("/api/auth", authRouter);
-app.use("/api/publication", publicationRouter);
-app.use("/api/subscription", subscriptionRouter);
-app.use("/api/member", memberRouter);
-app.use("/api/event", eventRouter);
+app.use("/api/manuscript", manuscriptRoutes);
+app.use("/api/journal", journalRoutes);
+app.use('/api/proceedings', proceedingsRoutes);
+app.use('/api/conference', conferenceSubmissionRoutes);
+app.use('/api/author', authorRoutes);
 
 app.use(function(err, req, res, next) {
-  res.locals.message = err.message;
-  res.locals.error = req.app.get('env') === 'development' ? err : {};
+  res.status(500).json({ error: err.message })
 });
+
 
 app.listen(port, () => {
   console.log(`Listening at http://localhost:${port}`);

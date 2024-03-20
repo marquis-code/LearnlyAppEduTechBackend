@@ -4,17 +4,29 @@ const jwt = require("jsonwebtoken");
 const bcrypt = require("bcrypt");
 const crypto = require("crypto");
 const nodemailer = require("nodemailer");
-const Subscription = require("../models/subscription.model");
 const OTPVerification = require("../models/OTPVerification");
 const Mailgen = require("mailgen");
 
-// Generate email body using Mailgen
+function generateUsername(surname, otherName) {
+  // Extract the first letter of the other name and combine it with the surname
+  const initialOfOtherName = otherName.charAt(0).toLowerCase();
+  const processedSurname = surname.toLowerCase().replace(/\s+/g, '');
+
+  // Generate a random number to append for uniqueness
+  const randomNumber = Math.floor(Math.random() * 1000);
+
+  // Construct the username
+  const username = `${initialOfOtherName}${processedSurname}${randomNumber}`;
+
+  return username;
+}
+
 const MailGenerator = new Mailgen({
   theme: "default",
   product: {
-    name: "AAIRTA Team.",
+    name: "J-AIRDOTA Team.",
     link: "https://mailgen.js/",
-    copyright: 'Copyright © 2024 AAIRTA. All rights reserved.',
+    copyright: "Copyright © 2024 J-AIRDOTA. All rights reserved.",
   },
 });
 
@@ -23,7 +35,7 @@ let mailtrapTransport = nodemailer.createTransport({
   port: 2525,
   auth: {
     user: process.env.MAILTRAP_AUTH_USER,
-    pass: process.env.MAILTRAP_AUTH_PASSWORD
+    pass: process.env.MAILTRAP_AUTH_PASSWORD,
   },
 });
 
@@ -31,20 +43,20 @@ const sendOTPVerificationEmail = async ({ _id, email, username }, res) => {
   const otp = `${Math.floor(1000 + Math.random() * 9000)}`;
   const emailMessage = {
     body: {
-      greeting: 'Dear',
-      signature: 'Sincerely',
+      greeting: "Dear",
+      signature: "Sincerely",
       title: `Hello, ${username}`,
-      intro: `We recieved a request to access your AAIRTA Account ${email} through your email address. Your One Time OTP verification code is: ${otp}`,
+      intro: `We recieved a request to access your J-AIRDOTA Account ${email} through your email address. Your One Time OTP verification code is: ${otp}`,
       outro:
         "Need help, or have questions? Just reply to this email, we'd love to help.",
     },
   };
-  var emailBody = MailGenerator.generate(emailMessage);
+  let emailBody = MailGenerator.generate(emailMessage);
 
   const mailTrapMailOptions = {
-    from: process.env.ACADEMY_AUTH_EMAIL, 
+    from: process.env.ACADEMY_AUTH_EMAIL,
     to: email,
-    subject: "AAIRTA Email Verification Code (One Time Password)", // Subject line
+    subject: "J-AIRTA Email Verification Code (One Time Password)", // Subject line
     html: emailBody,
   };
 
@@ -52,8 +64,8 @@ const sendOTPVerificationEmail = async ({ _id, email, username }, res) => {
     if (err) {
       console.log(err);
     } else {
-      const saltRounds = 10;
-      const hashedOtp = await bcrypt.hash(otp, saltRounds);
+      const salt = await bcrypt.genSalt(10);
+      const hashedOtp = await bcrypt.hash(otp, salt);
       const newOTPVerification = await new OTPVerification({
         userId: _id,
         otp: hashedOtp,
@@ -69,63 +81,81 @@ const sendOTPVerificationEmail = async ({ _id, email, username }, res) => {
   });
 };
 
-const maxAge = 3 * 24 * 60 * 60;
-const createToken = (id, role) => {
-  const accessToken = jwt.sign({ id, role }, process.env.JWT_SECRET, {
-    expiresIn: maxAge,
+const createToken = (userId, userRole) => {
+  const accessToken = jwt.sign({ id: userId, role: userRole }, process.env.JWT_SECRET, {
+    expiresIn: 24 * 60 * 60 * 1000,
   });
   return accessToken;
 };
 
 module.exports.signup_handler = async (req, res) => {
   try {
-    const { username, email, password, role } = req.body;
+    const {
+      title,
+      email,
+      password,
+      role,
+      surname,
+      otherNames,
+      affirmation,
+      phone,
+    } = req.body;
     const user = await User.findOne({ email });
     if (user) {
       return res.status(400).json({ errorMessage: "User Already Exist" });
     }
-
+    const hash = await bcrypt.hash(password, 10); //Hash the password
     const newAdminUser = new User({
-      username,
+      title,
       email,
-      password,
+      password: hash,
       role,
+      surname,
+      otherNames,
+      affirmation,
+      phone,
       verified: false,
+      username: generateUsername(surname, otherNames)
     });
-
     newAdminUser
       .save()
       .then((result) => {
         sendOTPVerificationEmail(result, res);
       })
       .catch((error) => {
+        console.log(error)
         return res.json({
           errorMessage:
-            "Something went wrong, while saving admin user account, please try again.",
+            "Something went wrong, while saving user account, please try again.",
         });
       });
   } catch (error) {
     return res.json({
       errorMessage:
-        "Something went wrong, while saving admin user account, please try again.",
+      "Something went wrong, while saving user account, please try again.",
     });
   }
 };
 
 module.exports.login_handler = async (req, res) => {
-  const { email, password } = req.body;
+  const { login, password } = req.body;
 
   try {
-    const user = await User.findOne({ email });
+    const user = await User.findOne({ $or: [{ username: login }, { email: login }] });
     if (!user) {
-      return res.status(400).json({ errorMessage: "Invalid credentials!" });
+      return res.status(401).json({ errorMessage: 'Login failed! Check authentication credentials' });
     }
     let auth = await bcrypt.compare(password, user.password);
     if (!auth) {
       return res.status(400).json({ errorMessage: "Invalid credentials!" });
     }
-
-    sendOTPVerificationEmail(user, res);
+    const token = createToken(user._id, user.role)
+    res.status(200).json({
+      token,
+      role: user.role,
+      message: "Logged in Successfully",
+    });
+    // sendOTPVerificationEmail(user, res);
   } catch (error) {
     return res.status(500).json({ errorMessage: error.message });
   }
@@ -142,89 +172,45 @@ module.exports.logout_handler = (req, res, next) => {
   }
 };
 
-// module.exports.request_reset_handler = async (req, res, next) => {
-//   const { email } = req.body;
-//   try {
-//     let user = await User.findOne({ email });
-//     if (!user) {
-//       return res
-//         .status(404)
-//         .json({ errorMessage: "User with given email does not exist" });
-//     }
-
-//     let token = await Token.findOne({ userId: user._id });
-
-//     // if (token) await token.deleteOne();
-
-//     if (!token) {
-//       token = await new Token({
-//         userId: user._id,
-//         token: crypto.randomBytes(32).toString("hex"),
-//       }).save();
-//     }
-
-//     const link = `${process.env.clientURL}/passwordReset?token=${token.token}&id=${user._id}`;
-//     await sendEmail(
-//       user.email,
-//       "Password reset request",
-//       { name: user.username, link: link },
-//       "../templates/requestResetPassword.handlebars"
-//     );
-
-//     return res.status(200).json({
-//       successMessage: "Reset Password link has been sent successfully",
-//     });
-//   } catch (error) {
-//     return res.status(500).json({ errorMessage: "Something went wrong." });
-//   }
-// };
-
 module.exports.reset_handler = async (req, res) => {
-  const userId = req.params.userId;
-  const { password } = req.body;
   try {
-    let user = await User.findById({ _id: userId });
+    const { resetToken, newPassword } = req.body;
+    // Find the user with the provided reset token
+    const user = await User.findOne({
+      passwordResetToken: resetToken,
+      passwordResetExpires: { $gt: Date.now() },
+    });
+    if (!user) {
+      return res.status(401).json({ error: 'Invalid or expired reset token' });
+    }
 
     if (!user) {
-      return res.status(400).json({ errorMessage: "Invalid link or expired." });
+      return res.status(400).send('Invalid or expired password reset token.');
     }
-
-    const passwordResetToken = await Token.findOne({
-      userId: user._id,
-      token: req.params.token,
-    });
-
-    if (!passwordResetToken) {
-      return res.status(400).json({ errorMessage: "Invalid link or expired." });
-    }
-
     const salt = await bcrypt.genSalt(10);
-    const hash = await bcrypt.hash(password, Number(salt));
+    const hashedPassword = await bcrypt.hash(newPassword, salt);
 
-    await User.updateOne(
-      { _id: userId },
-      { $set: { password: hash } },
-      { new: true }
-    );
+     // Update the user's password and reset token fields
+    user.password = hashedPassword;
+    user.passwordResetToken = undefined;
+    user.passwordResetExpires = undefined;
+    await user.save();
 
-    await passwordResetToken.delete();
-
-    await sendEmail(
-      user.email,
-      "Password Reset Successfully",
-      {
-        name: user.username,
-      },
-      "../templates/resetPassword.handlebars"
-    );
-
-    await passwordResetToken.deleteOne();
-
-    return res
-      .status(200)
-      .json({ successMessage: "Password Reset was successfully" });
+    const mailOptions = {
+      to: user.email,
+      from: process.env.ACADEMY_AUTH_EMAIL,
+      subject: 'Password Reset Success',
+      text: 'Password was successful. Login to your J-AIRDOTA account with your new password.',
+    }
+    mailtrapTransport.sendMail(mailOptions, (err) => {
+      if (err) return res.status(500).send('Error sending email.');
+      res.status(200).json({
+        message: 'Congratulations ' + user.surname + ' password reset was successful.'
+      });
+    });
   } catch (error) {
-    return res.status(500).json({ errorMessage: "Something went wrong." });
+    console.log(error.message);
+    return res.status(500).json({ errorMessage: "" });
   }
 };
 
@@ -255,7 +241,7 @@ module.exports.handle_otp_verification = async (req, res) => {
             errorMessage: "Code has expired. Please request again.",
           });
         } else {
-          const validOtp = await bcrypt.compare(otp, hashedOtp);
+          const validOtp = bcrypt.compare(otp, hashedOtp);
 
           if (!validOtp) {
             return res.status(400).json({
@@ -268,7 +254,7 @@ module.exports.handle_otp_verification = async (req, res) => {
 
             const token = createToken(user._id, user.role);
             res.cookie("jwt", token, {
-              maxAge: maxAge * 1000,
+              maxAge: 24 * 60 * 60 * 1000,
               httpOnly: true,
               secure: true,
             });
@@ -279,13 +265,9 @@ module.exports.handle_otp_verification = async (req, res) => {
                 email: user.email,
                 role: user.role,
               },
-              successMessage: "You are now logged in.",
+              successMessage: "Account was created successfully. ✅",
               accessToken: token,
             });
-            // return res.status(200).json({
-            //   successMessage: "Email has been verified.",
-            //   data: { userId },
-            // });
           }
         }
       }
@@ -315,48 +297,41 @@ module.exports.handle_resend_otp_verification = async (req, res) => {
   }
 };
 
-module.exports.handle_subscription = async (req, res) => {
-  const { email } = req.body;
-
-  try {
-    let user = await Subscription.findOne({ email });
-
-    if (user) {
-      return res.status(404).json({
-        errorMessage: "You have already subscribed to our email service",
+module.exports.handle_forgot_password = async (req, res) => {
+    try {
+      const { email } = req.body;
+      const user = await User.findOne({ email });
+      if (!user) {
+        return res.status(404).send('No account with that email address exists.');
+      }
+  
+      // Generate a token
+      const resetToken = crypto.randomBytes(20).toString('hex');
+      const resetURL = `https://${req.headers.host}/reset-password?token=${resetToken}`;
+      user.passwordResetToken = resetToken;
+      user.passwordResetExpires = Date.now() + 3600000; // 1 hour
+      await user.save();
+  
+      // Send email
+      const mailOptions = {
+        to: email,
+        from: process.env.ACADEMY_AUTH_EMAIL,
+        subject: 'Password Reset',
+        text: `You are receiving this because you (or someone else) have requested the reset of the password for your account.\n\n` +
+              `Please click on the following link, or paste this into your browser to complete the process:\n\n` +
+              `${resetURL}\n\n` +
+              `If you did not request this, please ignore this email and your password will remain unchanged.\n`,
+      };
+  
+      mailtrapTransport.sendMail(mailOptions, (err) => {
+        if (err) return res.status(500).send('Error sending email.');
+        res.status(200).json({
+          message: 'An email has been sent to ' + email + ' with further instructions.'
+        });
+      });
+    } catch (error) {
+      res.status(500).json({
+        errorMessage: 'Error on forgot password.'
       });
     }
-
-    const emailOptions = {
-      to: email,
-      from: process.env.AUTH_EMAIL,
-      subject: `Thanks for subscribing to AAIRTA`,
-      html: `
-            <div style="box-shadow: 0 4px 8px 0 rgba(0, 0, 0, 0.2), 0 6px 20px 0 rgba(0, 0, 0, 0.19);  border-radius: 25px; padding: 10px">
-              <h4>Thank you for subscribing to our newsletter.</h4>
-              <p>Your subscription has been confirmed.</p
-              <p>If at anytime you wish to stop recieving our newsletter, you can click the Unsubscribe link in the bottom of the news letter</p>
-              <p>If you have any questions about AAIRTA, contact us via the following emails:
-               <p>aairta@gmail.com</p>
-              <p>isholawilliams@gmail.com</p>
-              <p>Sincerely,</p>
-              <p>Thank you again!</p>
-            </div>
-            `,
-    };
-
-    const newUser = new Subscription({
-      email,
-    });
-
-    await newUser.save();
-    await transporter.sendMail(emailOptions);
-    return res.status(200).json({
-      successMessage: "Thanks for subscribing.",
-    });
-  } catch (error) {
-    return res.status(500).json({
-      errorMessage: "SOMETHING WENT WRONG. PLEASE TRY AGAIN",
-    });
-  }
-};
+}
