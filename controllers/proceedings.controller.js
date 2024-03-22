@@ -1,4 +1,6 @@
 const Proceeding = require('../models/proceeding.models');
+const Author = require('../models/author.models');
+const ProceedingComments = require('../models/proceedingComment.models');
 const cloudinary = require("../utils/cloudinary");
 const mongoose = require("mongoose");
 
@@ -49,7 +51,7 @@ exports.getAllProceedings = async (req, res) => {
   };
   try {
     const count = await Proceeding.countDocuments(searchQuery);
-    const proceedings = await Proceeding.find(searchQuery).populate('author')
+    const proceedings = await Proceeding.find(searchQuery).populate('authors').populate('comments')
       .limit(limit)
       .skip((page - 1) * limit)
       .exec();
@@ -70,7 +72,7 @@ exports.getAllProceedings = async (req, res) => {
 // Get a single proceeding by ID
 exports.getProceedingById = async (req, res) => {
   try {
-    const proceeding = await Proceeding.findById(req.params.id).populate('author')
+    const proceeding = await Proceeding.findById(req.params.id).populate('authors').populate('comments')
     if (!proceeding) {
       return res.status(404).send();
     }
@@ -129,3 +131,24 @@ exports.deleteProceeding = async (req, res) => {
     res.status(500).json({ ...error, errorMessage: "Something went wrong. Please try again." });
   }
 };
+
+exports.comment = async (req, res) => {
+  const { proceedingId, authorId } = req.params;
+  const { text } = req.body;
+
+  try {
+    const proceeding = await Proceeding.findById(proceedingId);
+    const author = await Author.findById(authorId);
+    if (!proceeding) return res.status(404).json({errorMessage: "Couldn't find proceeding"});
+    if (!author) return res.status(404).json({errorMessage: "Couldn't find author"});
+    const comment = new ProceedingComments({ text, author: authorId, proceeding: proceedingId });
+    await comment.save();
+
+    proceeding.comments.push(comment._id);
+    await proceeding.save();
+
+    res.status(201).json(comment);
+  } catch (error) {
+    res.status(500).send(error.message);
+  }
+}

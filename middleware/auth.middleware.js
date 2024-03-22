@@ -17,20 +17,24 @@ const requireAuth = (req, res, next) => {
 };
 
 const checkUser = (req, res, next) => {
-  if (req.headers && req.headers.authorization && req.headers.authorization.split(' ')[0] === 'JWT') {
+  console.log(req.headers.authorization)
+  if (req.headers && req.headers.authorization && req.headers.authorization.split(' ')[0] === 'Bearer') {
     jsonwebtoken.verify(req.headers.authorization.split(' ')[1], process.env.JWT_SECRET, async (err, decodedToken) => {
+      console.log(decodedToken, 'token here')
       if (err) {
         return res.status(401).json({ errorMessage: err.message });
       }
-      if (decodedToken.role !== 'author' || decodedToken.role !== 'editor' || decodedToken.role !== 'reviewer') {
-        return res.status(401).json({ errorMessage: "Access Denied. You need Admin role access." });
+
+      if(decodedToken.role === 'author' || decodedToken.role === 'editor' || decodedToken.role === 'reviewer'){
+        User.findById(decodedToken.id).then((user) => {
+          res.locals.user = user;
+          next();
+        }).catch((err) => {
+          return res.status(500).json({ errorMessage: err.message })
+        })
+      }else {
+        return res.status(401).json({ errorMessage: "Access denied" });
       }
-      User.findById(decodedToken.id).then((user) => {
-        res.locals.user = user;
-        next();
-      }).catch((err) => {
-        return res.status(500).json({ errorMessage: err.message })
-      })
     }
     )
   } else {

@@ -1,4 +1,5 @@
 const ConferenceSubmission = require("../models/conference.models");
+const Comment = require('../models/comment.models');
 const cloudinary = require("../utils/cloudinary");
 const mongoose = require("mongoose");
 
@@ -50,7 +51,7 @@ exports.getAllSubmissions = async (req, res) => {
 
   try {
     const count = await ConferenceSubmission.countDocuments(searchQuery);
-    const submissions = await ConferenceSubmission.find(searchQuery).populate('author')
+    const submissions = await ConferenceSubmission.find(searchQuery).populate('author').populate('comments')
     .limit(limit)
     .skip((page - 1) * limit)
     .exec();
@@ -70,7 +71,7 @@ exports.getAllSubmissions = async (req, res) => {
 
 exports.getSubmissionById = async (req, res) => {
   try {
-    const submission = await ConferenceSubmission.findById(req.params.id).populate('author');
+    const submission = await ConferenceSubmission.findById(req.params.id).populate('author').populate('comments')
     if (!submission) {
       return res.status(404).send();
     }
@@ -136,3 +137,23 @@ exports.deleteSubmission = async (req, res) => {
     res.status(500).json({ error, errorMessage: "Something went wrong. Please try again." });
   }
 };
+
+exports.comment = async (req, res) => {
+  const { id } = req.params;
+  const { text } = req.body;
+
+  try {
+    const conference = await ConferenceSubmission.findById(id);
+    if (!conference) return res.status(404).send('Conference not found.');
+
+    const comment = new Comment({ text, conference: id });
+    await comment.save();
+
+    conference.comments.push(comment._id);
+    await conference.save();
+
+    res.status(201).json(comment);
+  } catch (error) {
+    res.status(500).send(error.message);
+  }
+}

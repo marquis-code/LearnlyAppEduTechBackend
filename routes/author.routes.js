@@ -4,10 +4,10 @@ const router = express.Router();
 const upload = require("../utils/multer");
 const authorController = require('../controllers/author.controller');
 
-router.post('/create', upload.single('file'), authorController.createAuthor);
-router.get('/list', authorController.getAuthors);
-router.get('/:id', authorController.getAuthorById);
-router.patch('/edit/:id',  checkUser, upload.single("file"), authorController.updateAuthor);
-router.delete('/remove/:id', checkUser, authorController.deleteAuthor);
+router.post('/create',checkUser, upload.single('file'), authorController.createAuthor);
+router.get('/',checkUser, authorController.getAuthors);
+router.get('/:id',checkUser, authorController.getAuthorById);
+router.patch('/:id',  checkUser, upload.single("file"), authorController.updateAuthor);
+router.delete('/:id', checkUser, authorController.deleteAuthor);
 
 module.exports = router;

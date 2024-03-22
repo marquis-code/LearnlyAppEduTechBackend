@@ -39,10 +39,13 @@ const proceedingSchema = new mongoose.Schema({
     type: String,
   },
   additionalFiles: [String], // Optional, for supplementary materials
-  comments: [{
-    body: String,
-    date: Date,
-  }], // Optional, for review comments or author responses
+  comments: {
+    type: [{
+      type: mongoose.Schema.Types.ObjectId,
+       ref: 'ProceedingComments',
+    }],
+    required: false
+  }, // Optional, for review comments or author responses
 });
 
 proceedingSchema.virtual("id").get(function () {

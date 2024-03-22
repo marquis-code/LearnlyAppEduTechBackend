@@ -1,4 +1,6 @@
 const Journal = require('../models/journal.models');
+const JournalComments  = require('../models/journalComment.models')
+const Author = require('../models/author.models')
 const cloudinary = require("../utils/cloudinary");
 const mongoose = require("mongoose");
 
@@ -49,7 +51,7 @@ exports.getJournals = async (req, res) => {
     };
     try {
       const count = await Journal.countDocuments(searchQuery);
-      const journals = await Journal.find(searchQuery).populate('author')
+      const journals = await Journal.find(searchQuery).populate('authors').populate('comments')
         .limit(limit * 1)
         .skip((page - 1) * limit)
         .exec();
@@ -69,7 +71,7 @@ exports.getJournals = async (req, res) => {
 
 exports.getJournalById = async (req, res) => {
   try {
-    const journal = await Journal.findById(req.params.id).populate('author')
+    const journal = await Journal.findById(req.params.id).populate('authors').populate('comments')
     if (!journal) {
       return res.status(404).send();
     }
@@ -127,3 +129,24 @@ exports.deleteJournal = async (req, res) => {
     res.status(500).json({ ...error, errorMessage: "Something went wrong. Please try again." });
   }
 };
+
+exports.comment = async (req, res) => {
+  const { authorId, journalId } = req.params;
+  const { text } = req.body;
+
+  try {
+    const journal = await Journal.findById(journalId);
+    const author = await Author.findById(authorId);
+    if (!journal) return res.status(404).json({errorMessage: "Couldn't find journal"});
+    if (!author) return res.status(404).json({errorMessage: "Couldn't find author"});
+    const comment = new JournalComments({ text, author: authorId, journal: journalId });
+    await comment.save();
+
+    journal.comments.push(comment._id);
+    await journal.save();
+
+    res.status(201).json(comment);
+  } catch (error) {
+    res.status(500).send(error.message);
+  }
+}

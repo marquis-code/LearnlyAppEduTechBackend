@@ -33,13 +33,13 @@ const conferenceSubmissionSchema = new mongoose.Schema({
     enum: ['Submitted', 'Under Review', 'Accepted', 'Rejected'],
     default: 'Submitted',
   },
-  comments: [{
-    text: String,
-    date: {
-      type: Date,
-      default: Date.now,
-    },
-  }], // Optional
+  comments: {
+    type: [{
+      type: mongoose.Schema.Types.ObjectId,
+       ref: 'Comment',
+    }],
+    required: false
+  }, // Optional
   documentPath: {
     type: String,
     required: false, // Optional, assuming not all submissions are document-based (e.g., keynote proposals might not require a document submission)
