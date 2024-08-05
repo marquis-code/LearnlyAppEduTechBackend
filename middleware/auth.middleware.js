@@ -1,46 +1,35 @@
 const jsonwebtoken = require("jsonwebtoken");
 const User = require("../models/user.models");
+const apiResponse = require("../utils/api_response");
 
-const requireAuth = (req, res, next) => {
-  const token = req.cookies.jwt;
-  if (token) {
-    jsonwebtoken.verify(token, process.env.JWT_SECRET, (err, decodedToken) => {
-      if (err) {
-        return res.status(401).json({ errorMessage: "Something went wrong." });
-      } else {
-        next();
-      }
-    });
-  } else {
-    return res.status(401).json({ errorMessage: "Access denied" });
+const verifyUser = async (req, res, next) => {
+  const authHeader = req.headers.authorization;
+
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return apiResponse(res, 403, "Access denied. No token provided.");
   }
-};
 
-const checkUser = (req, res, next) => {
-  console.log(req.headers.authorization)
-  if (req.headers && req.headers.authorization && req.headers.authorization.split(' ')[0] === 'Bearer') {
-    jsonwebtoken.verify(req.headers.authorization.split(' ')[1], process.env.JWT_SECRET, async (err, decodedToken) => {
-      console.log(decodedToken, 'token here')
-      if (err) {
-        return res.status(401).json({ errorMessage: err.message });
-      }
+  const token = authHeader.split(" ")[1];
 
-      if(decodedToken.role === 'author' || decodedToken.role === 'editor' || decodedToken.role === 'reviewer'){
-        User.findById(decodedToken.id).then((user) => {
-          res.locals.user = user;
-          next();
-        }).catch((err) => {
-          return res.status(500).json({ errorMessage: err.message })
-        })
-      }else {
-        return res.status(401).json({ errorMessage: "Access denied" });
-      }
+  try {
+    const decodedToken = jsonwebtoken.verify(token, process.env.JWT_SECRET);
+
+    const user = await User.findById(decodedToken.id);
+    if (!user) {
+      return apiResponse(res, 401, "User not found.");
     }
-    )
-  } else {
-    return res.status(403).json({ errorMessage: "Access denied." });
-    // next();
+
+    req.user = user;
+    next();
+  } catch (error) {
+    if (error.name === "JsonWebTokenError") {
+      return apiResponse(res, 401, "Invalid token.");
+    } else if (error.name === "TokenExpiredError") {
+      return apiResponse(res, 401, "Token has expired.");
+    } else {
+      return apiResponse(res, 500, "Internal server error.");
+    }
   }
 };
 
-module.exports = { requireAuth, checkUser };
+module.exports = { verifyUser };

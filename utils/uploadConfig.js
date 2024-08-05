@@ -1,4 +1,3 @@
-// In a file named uploadConfig.js
 const multer = require('multer');
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
