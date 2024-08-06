@@ -1,4 +1,7 @@
 E-commerce Product Listing Application
+The Backend of the application was hosted on render.com 
+Here is the url of the backend application (https://app-edu-tech-api.onrender.com)
+
 This application is a simple e-commerce product listing platform with a Vue.js frontend and a Node.js + Express.js backend. The application provides functionalities for product management and user authentication.
 
 Backend Documentation
